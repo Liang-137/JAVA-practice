@@ -156,3 +156,16 @@ days 包含该月的每一天，每天有 date、amount、mealCount，无消费�
 | 500 | INTERNAL_ERROR | 服务内部错误，通过 errorId 关联日志 |
 
 本地单人版没有 token 和用户切换接口。后续接前端时可使用开发服务器代理，将 `/api` 转发到本服务；当前未开放任意来源的跨域访问。
+
+## 从档口记录一次用餐体验
+
+`POST /api/stalls/{stallId}/experiences` 使用 multipart/form-data。必填的 `record` 部分使用 application/json，例如：
+
+```json
+{"dishName":"牛肉面","eatenAt":"2026-11-20T12:00:00","mealType":"LUNCH","paidAmount":15,"comment":"汤比较清淡","rating":{"taste":4,"valueScore":5,"portion":4,"recommendation":4}}
+```
+
+可选的 `photos` 部分可以重复提交多张 JPEG 或 PNG，单张最大 5MB，整个请求最大 6MB。comment 和 rating 都可省略。一条体验记录一份菜。按当前用户、档口和去除首尾空白后的菜名复用菜品。新菜品以首次实付额作为参考价，类别为“未分类”。保存成功返回 201 及该次记录，包含 mealId、eatenAt、item 和照片地址列表 photos。
+
+`GET /api/dishes/{dishId}/experiences?page=1&size=20` 返回按用餐时间倒序分页的体验，时间相同按用餐 ID 倒序。多菜用餐只展示所选菜品的评分、文字和照片。旧用餐记录同样可见，原菜品相册继续通过原接口读取。
+从已有菜品详情再次记录时，record 可以传 dishId 并省略 dishName。服务端校验该菜品属于当前档口。
