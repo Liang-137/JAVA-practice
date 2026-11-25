@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Build and test
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Check whether the build is needed
+        id: changes
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # A pull request checkout is the merge result. Its first parent is the base.
+          base="$BEFORE"
+          if [[ "$EVENT" == pull_request ]]; then base=HEAD^1; fi
+          if [[ -n "$base" ]] && git cat-file -e "$base^{commit}" 2>/dev/null &&
+             git diff --quiet --no-renames "$base" HEAD -- . ':(top,exclude)README.md' ':(top,glob,exclude)docs/**/*.md'; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "Only documentation changed. Skipped the build." >> "$GITHUB_STEP_SUMMARY"
+          else
+            # Manual runs and pushes with an unavailable base get full validation.
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Java 17 and restore Maven cache
+        if: steps.changes.outputs.build == 'true'
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-jdk: false
+          cache-dependency-path: |
+            pom.xml
+            build.ps1
+          cache-path: |
+            .m2
+            .tools/apache-maven-*
+            !.tools/*.zip
+
+      - name: Test and package
+        if: steps.changes.outputs.build == 'true'
+        run: ./build.ps1 package '-DfailIfNoTests=true'
+
+      - name: Run the demo against the packaged JAR
+        if: steps.changes.outputs.build == 'true'
+        run: |
+          $jar = Get-Item target/*.jar
+          $server = Start-Process java -ArgumentList '-jar', $jar.FullName -PassThru -NoNewWindow
+          try {
+            curl.exe --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 --max-time 3 http://127.0.0.1:8080/api/health
+            if ($LASTEXITCODE -ne 0) { throw 'The packaged service did not become ready.' }
+
+            $photo = Join-Path $env:RUNNER_TEMP 'demo.png'
+            $bitmap = [System.Drawing.Bitmap]::new(2, 2)
+            try { $bitmap.Save($photo, [System.Drawing.Imaging.ImageFormat]::Png) } finally { $bitmap.Dispose() }
+            ./scripts/demo.ps1 -PhotoPath $photo
+          } finally {
+            if (!$server.HasExited) { $server.Kill(); $server.WaitForExit() }
+          }
