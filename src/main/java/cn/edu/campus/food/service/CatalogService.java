@@ -97,9 +97,8 @@ public class CatalogService {
             throw BusinessException.invalid("最低价格不能大于最高价格");
         return db.dishes(user.id(), query);
     }
-    public Page<Dish> dishes(DishQuery query) {
-        var dishes = candidates(query);
-        return page(dishes, query.page(), query.size());
+    public Page<Dish> dishes(DishQuery query, int page, int size) {
+        return page(candidates(query), page, size);
     }
     public Recommendation recommend(DishQuery query) {
         var dishes = candidates(query).stream().filter(d -> d.available() && !d.avoided()).toList();

@@ -54,7 +54,8 @@ class FoodDiaryIntegrationTest {
     @Autowired PhotoService photos;
     @Autowired TestUser user;
     @LocalServerPort int port;
-    final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    private static final HttpClient HTTP = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+            .proxy(HttpClient.Builder.NO_PROXY).connectTimeout(Duration.ofSeconds(5)).build();
     long canteenId, stallId;
 
     @BeforeEach void reset() {
@@ -75,7 +76,7 @@ class FoodDiaryIntegrationTest {
         return new MealInput(LocalDateTime.of(2020, 1, day, 12, 0), MealType.LUNCH, "", List.of(items));
     }
     DishQuery filter(BigDecimal max, String flavor, Boolean eaten, Boolean archived) {
-        return new DishQuery(null,null,null,null,flavor,null,max,null,null,eaten,archived,null,null);
+        return new DishQuery(null,null,null,null,flavor,null,max,null,null,eaten,archived);
     }
     @Test void mealTotalsUseActualPaymentAndCountMealsInsteadOfDishes() {
         var rice = dish("牛肉饭", "15.00", "微辣");
@@ -121,13 +122,13 @@ class FoodDiaryIntegrationTest {
         dish("辣饭", "30", "麻辣");
         catalog.mark(bad.id(),new MarkInput(false,true));
         var query = filter(new BigDecimal("15"),"清淡",null,false);
-        assertThat(catalog.dishes(query).total()).isEqualTo(2);
+        assertThat(catalog.dishes(query,1,20).total()).isEqualTo(2);
         for (int i=0;i<10;i++) assertThat(catalog.recommend(query).dish().id()).isEqualTo(good.id());
         assertThatThrownBy(() -> catalog.mark(good.id(),new MarkInput(true,true))).isInstanceOf(BusinessException.class);
         meals.create(meal(1,item(good.id(),"9",5)));
-        assertThat(catalog.dishes(filter(null,null,true,false)).total()).isEqualTo(1);
+        assertThat(catalog.dishes(filter(null,null,true,false),1,20).total()).isEqualTo(1);
         catalog.archiveCanteen(canteenId);
-        assertThat(catalog.dishes(query).total()).isZero();
+        assertThat(catalog.dishes(query,1,20).total()).isZero();
         assertThatThrownBy(() -> catalog.recommend(filter(null,null,null,true))).isInstanceOf(BusinessException.class);
         assertThat(insights.monthly(YearMonth.of(2020,1)).totalAmount()).isEqualByComparingTo("9");
         catalog.restoreCanteen(canteenId);
@@ -139,7 +140,7 @@ class FoodDiaryIntegrationTest {
         var photo = photos.upload(dish.id(),png());
         user.current.set(2);
         assertThat(catalog.canteens(true)).isEmpty();
-        assertThat(catalog.dishes(filter(null,null,null,true)).total()).isZero();
+        assertThat(catalog.dishes(filter(null,null,null,true),1,20).total()).isZero();
         assertThatThrownBy(() -> catalog.dish(dish.id())).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> catalog.mark(dish.id(),new MarkInput(true,false))).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> meals.get(meal.id())).isInstanceOf(BusinessException.class);
@@ -176,7 +177,7 @@ class FoodDiaryIntegrationTest {
         assertThatThrownBy(() -> experiences.save(stallId, input, List.of(png(), new MockMultipartFile("photos", new byte[0]))))
                 .isInstanceOf(BusinessException.class);
         assertThat(meals.list(null, null, 1, 20).total()).isZero();
-        assertThat(catalog.dishes(filter(null, null, null, null)).total()).isZero();
+        assertThat(catalog.dishes(filter(null, null, null, null), 1, 20).total()).isZero();
     }
 
     MockMultipartFile png() throws IOException {
@@ -239,6 +240,46 @@ class FoodDiaryIntegrationTest {
         assertThat(request("POST","/api/meals",payload.replace("\"taste\":5","\"taste\":6")).statusCode()).isEqualTo(400);
         assertThat(request("POST","/api/meals",payload.replace("18.50","-1")).statusCode()).isEqualTo(400);
     }
+    @Test void mealWritesRejectFractionalIntegersAndNumericMealTypes() throws Exception {
+        var dish = dish("套餐","10","清淡");
+        String payload = """
+            {"eatenAt":"2020-01-02T12:00:00","mealType":"LUNCH","note":"",
+             "items":[{"dishId":%d,"quantity":2,"paidAmount":18.50,"comment":"",
+               "rating":{"taste":5,"valueScore":4,"portion":4,"recommendation":5}}]}
+            """.formatted(dish.id());
+        var original = meals.create(meal(1, item(dish.id(), "10", 5)));
+        for (String invalid : List.of(payload.replace("\"taste\":5", "\"taste\":4.9"),
+                payload.replace("\"quantity\":2", "\"quantity\":2.7"),
+                payload.replace("\"LUNCH\"", "0"))) {
+            assertThat(request("POST", "/api/meals", invalid).statusCode()).isEqualTo(400);
+            assertThat(request("PUT", "/api/meals/" + original.id(), invalid).statusCode()).isEqualTo(400);
+        }
+        assertThat(meals.list(null, null, 1, 20).total()).isEqualTo(1);
+        assertThat(meals.get(original.id())).isEqualTo(original);
+    }
+
+    @Test void monthFiltersRequireFourDigitYearAndValidTwoDigitMonth() throws Exception {
+        for (String endpoint : List.of("/api/statistics/monthly", "/api/meals")) {
+            for (String invalid : List.of("%2B999999999-12", "%2B10000-01", "-2020-01", "2020-1", "2020-13")) {
+                assertThat(request("GET", endpoint + "?month=" + invalid, null).statusCode())
+                        .as("%s month=%s", endpoint, invalid).isEqualTo(400);
+            }
+            assertThat(request("GET", endpoint + "?month=2020-12", null).statusCode()).isEqualTo(200);
+        }
+    }
+
+    @Test void recommendationIgnoresPaginationAndValidatesDishFilters() throws Exception {
+        dish("面", "10", "清淡");
+        String endpoint = "/api/recommendations/random";
+        for (String pagination : List.of("page=-1&size=0", "page=abc&size=xyz", "page=9&size=101")) {
+            assertThat(request("GET", endpoint + "?maxPrice=10&" + pagination, null).statusCode()).isEqualTo(200);
+            assertThat(request("GET", "/api/dishes?" + pagination, null).statusCode()).isEqualTo(400);
+        }
+        assertThat(request("GET", endpoint + "?minPrice=-1&size=0", null).statusCode()).isEqualTo(400);
+        assertThat(request("GET", endpoint + "?maxPrice=9&size=0", null).body()).contains("NO_CANDIDATE");
+        assertThat(request("GET", "/api/dishes?page=2&size=1", null).body()).contains("\"items\":[]");
+    }
+
     @Test void modestConcurrentRequestsCompleteWithoutServerErrors() throws Exception {
         dish("并发查询菜品","10","清淡");
         var executor = Executors.newFixedThreadPool(8);
@@ -252,6 +293,6 @@ class FoodDiaryIntegrationTest {
         var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+path)).timeout(Duration.ofSeconds(15));
         if (body != null) builder.header("Content-Type","application/json");
         builder.method(method,body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
-        return http.send(builder.build(),HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        return HTTP.send(builder.build(),HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
     }
 }
