@@ -31,7 +31,10 @@ public class MealService {
         Map<Long,String> originalNames = old.items().stream().collect(Collectors.toMap(MealItem::dishId, MealItem::dishName));
         db.update("UPDATE meals SET eaten_at=?,meal_type=?,note=? WHERE id=? AND user_id=?",
                 input.eatenAt(), input.mealType().name(), input.note().strip(), id, user.id());
-        db.update("DELETE FROM meal_items WHERE meal_id=?", id);
+        Set<Long> retained = input.items().stream().map(MealItemInput::dishId).collect(Collectors.toSet());
+        for (long dishId : originalNames.keySet()) {
+            if (!retained.contains(dishId)) db.update("DELETE FROM meal_items WHERE meal_id=? AND dish_id=?", id, dishId);
+        }
         saveItems(id, input.items(), originalNames);
         return get(id);
     }
@@ -42,9 +45,9 @@ public class MealService {
             var dish = db.dish(user.id(), item.dishId());
             if (!dish.available() && !originalNames.containsKey(dish.id())) throw BusinessException.invalid("不能为已归档的食堂、档口或菜品新增用餐记录");
             var rating = item.rating();
-            db.insert("""
-                INSERT INTO meal_items(meal_id,dish_id,dish_name,quantity,paid_amount,taste,value_score,portion,recommendation,comment)
-                VALUES(?,?,?,?,?,?,?,?,?,?)
+            db.update("""
+                MERGE INTO meal_items(meal_id,dish_id,dish_name,quantity,paid_amount,taste,value_score,portion,recommendation,comment)
+                KEY(meal_id,dish_id) VALUES(?,?,?,?,?,?,?,?,?,?)
                 """, mealId, dish.id(), originalNames.getOrDefault(dish.id(), dish.name()), item.quantity(), item.paidAmount(),
                     rating == null ? null : rating.taste(), rating == null ? null : rating.valueScore(),
                     rating == null ? null : rating.portion(), rating == null ? null : rating.recommendation(), item.comment().strip());

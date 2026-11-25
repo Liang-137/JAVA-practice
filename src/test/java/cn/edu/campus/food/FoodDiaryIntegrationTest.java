@@ -147,6 +147,38 @@ class FoodDiaryIntegrationTest {
         assertThat(insights.ranking(RankingMetric.OVERALL,10)).isEmpty();
         assertThat(insights.monthly(YearMonth.of(2020,1)).mealCount()).isZero();
     }
+    @Autowired ExperienceService experiences;
+
+    @Test void experiencesReuseOnlyTheSameStallDishAndKeepPhotosPerVisit() throws Exception {
+        var input = new ExperienceService.Input(null, "拉面", meal(2).eatenAt(), MealType.LUNCH, BigDecimal.TEN, null, null);
+        var first = experiences.save(stallId, input, List.of(png(), png()));
+        var second = experiences.save(stallId, input, List.of(png()));
+        long dishId = first.item().dishId();
+        assertThat(second.item().dishId()).isEqualTo(dishId);
+        var other = catalog.createStall(new StallInput(canteenId, "另一档口"));
+        assertThat(experiences.save(other.id(), input, List.of()).item().dishId()).isNotEqualTo(dishId);
+        var side = dish("汤", "2", "清淡");
+        meals.update(first.mealId(), meal(3, item(dishId, "10", 5), item(side.id(), "2", null)));
+        var history = experiences.history(dishId, 1, 20).items();
+        assertThat(history).extracting(ExperienceService.Entry::mealId).containsExactly(first.mealId(), second.mealId());
+        assertThat(history.get(0).photos()).hasSize(2).isEqualTo(first.photos());
+        assertThat(history.get(1).photos()).hasSize(1).doesNotContainAnyElementsOf(first.photos());
+        assertThat(experiences.history(side.id(), 1, 20).items().get(0).photos()).isEmpty();
+        var url = first.photos().get(0);
+        long photoId = Long.parseLong(url.substring(url.lastIndexOf('/') + 1));
+        assertThat(experiences.image(photoId).imageData()).isEqualTo(png().getBytes());
+        meals.delete(first.mealId());
+        assertThatThrownBy(() -> experiences.image(photoId)).isInstanceOf(BusinessException.class);
+    }
+
+    @Test void invalidExperiencePhotoRollsBackNewDishAndMeal() {
+        var input = new ExperienceService.Input(null, "拉面", meal(2).eatenAt(), MealType.LUNCH, BigDecimal.TEN, null, null);
+        assertThatThrownBy(() -> experiences.save(stallId, input, List.of(png(), new MockMultipartFile("photos", new byte[0]))))
+                .isInstanceOf(BusinessException.class);
+        assertThat(meals.list(null, null, 1, 20).total()).isZero();
+        assertThat(catalog.dishes(filter(null, null, null, null)).total()).isZero();
+    }
+
     MockMultipartFile png() throws IOException {
         var bytes = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(2,2,BufferedImage.TYPE_INT_RGB),"png",bytes);

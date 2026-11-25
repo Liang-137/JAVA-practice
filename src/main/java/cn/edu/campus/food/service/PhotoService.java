@@ -51,7 +51,7 @@ public class PhotoService {
                 user.id(), dishId, filename, contentType);
         return new Photo(id, dishId, "/api/photos/" + id + "/content", contentType);
     }
-    private String validateImage(byte[] bytes) throws IOException {
+    static String validateImage(byte[] bytes) throws IOException {
         try (var stream = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
             var readers = ImageIO.getImageReaders(stream);
             if (!readers.hasNext()) throw BusinessException.invalid("仅支持真实的 PNG 或 JPEG 图片");
