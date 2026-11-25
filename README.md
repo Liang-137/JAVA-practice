@@ -4,39 +4,36 @@
 
 ## 运行
 
-需要 JDK 17～27、PowerShell；当前开发环境为 JDK 27。首次构建需要联网下载 Maven 和依赖。
+在 Windows 上准备 JDK 17～27 和 PowerShell 7，将 `JAVA_HOME` 设为本机 JDK 的安装目录。在包含 `pom.xml` 和 `build.ps1` 的项目根目录打开 PowerShell。首次构建会从 Maven Central 下载 Maven 和依赖，缓存分别位于项目的 `.tools` 和 `.m2`。
 
-在 PowerShell 中运行：
+### 测试并启动
 
 ```powershell
-cd F:\beihang\JAVA\JAVA-practice
+& "$env:JAVA_HOME\bin\java.exe" -version
 .\build.ps1 test
 .\build.ps1 run
 ```
 
-服务默认地址：`http://127.0.0.1:8080`。健康检查：`GET /api/health`。
-使用 Ctrl+C 停止。首次启动自动创建默认用户、一个食堂、一个档口、三个菜品和两条体验记录。示例菜品没有假图片地址，可以通过上传接口添加照片。以后启动不重复插入示例数据。
-
-启动后，打开**另一个 PowerShell 窗口**演示：
+保持服务窗口打开，在项目根目录打开**第二个 PowerShell 窗口**检查服务并运行演示。健康检查应返回 `status = UP`。
 
 ```powershell
-cd F:\beihang\JAVA\JAVA-practice
+Invoke-RestMethod 'http://127.0.0.1:8080/api/health'
 .\scripts\demo.ps1
-# 可选：同时演示真实照片上传（请替换成存在的文件）
-.\scripts\demo.ps1 -PhotoPath 'F:\photos\lunch.jpg'
 ```
 
-PowerShell 7 可以直接运行完整演示；脚本上传照片使用 Windows 自带的 `curl.exe`。
+首次启动会创建默认用户、一个食堂、一个档口、三个菜品和两条用餐记录。每次运行演示脚本都会新增一套餐单和用餐记录。要同时演示照片上传，运行脚本时加上 `-PhotoPath` 并传入本机现有 JPEG 或 PNG 文件的路径。上传使用 Windows 自带的 `curl.exe`。
 
-打包并运行：
+### 运行打包后的 JAR
+
+在服务窗口按 Ctrl+C 停止当前实例，再从项目根目录执行以下命令。
 
 ```powershell
 .\build.ps1 package
-java -jar .\target\food-diary-0.1.0.jar
+& "$env:JAVA_HOME\bin\java.exe" -jar .\target\food-diary-0.1.0.jar
 ```
 
-运行 JAR 时也应以项目根目录为工作目录。相对路径的数据文件、照片和日志会保存到当前工作目录。
-IDEA 用户可直接导入 `pom.xml`，并把运行配置的工作目录设为项目根目录。
+数据库、照片和日志分别保存在当前工作目录的 `data`、`uploads` 和 `logs` 中。从同一目录重新启动即可继续使用原有数据。
+在 IntelliJ IDEA 中可直接打开 `pom.xml`，选择项目 JDK，运行 `FoodDiaryApplication`，并将运行配置的工作目录设为项目根目录。
 
 ## 已实现
 
@@ -97,7 +94,7 @@ target/               构建产物（不提交源码包）
 - 端口占用：运行前 `$env:PORT='8081'`；演示时加 `-BaseUrl 'http://127.0.0.1:8081'`。
 - 图片支持真实 JPEG/PNG，单张最多 5MB、1200 万像素，不支持把其他文件改名伪装图片。
 - 数据库被占用：确认没有同时启动两个使用相同数据目录的实例。
-- 首次下载失败：检查网络，重新运行构建脚本；不需要全局安装 Maven。
+- 首次下载中断时，确认网络能访问 `repo.maven.apache.org`，然后在项目根目录重新运行 `.\build.ps1 test`。脚本会自行下载并校验 Maven，无需全局安装。如果已经用 IDEA 的 Maven 导入项目，也可以从 Maven 工具窗口运行 `Lifecycle → test`。
 - 测试使用独立内存数据库和临时图片目录，不会清空开发数据库。
 - 当前列表在完成数据库筛选后于内存分页，适用于本课程 demo 的小数据量。大规模多人版应改为数据库分页并优化聚合查询。
 - 如不需要初始化示例菜单，在第一次启动前于 `application.properties` 添加 `app.demo-data=false`。已生成数据不会被此开关删除。

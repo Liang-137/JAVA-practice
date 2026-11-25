@@ -9,5 +9,4 @@ public record DishQuery(@Positive Long canteenId, @Positive Long stallId,
                         @Size(max = 30) String flavor,
                         @DecimalMin("0") @Digits(integer = 6, fraction = 2) BigDecimal minPrice,
                         @DecimalMin("0") @Digits(integer = 6, fraction = 2) BigDecimal maxPrice,
-                        Boolean favorite, Boolean avoided, Boolean eaten, Boolean includeArchived,
-                        @Min(1) Integer page, @Min(1) @Max(100) Integer size) { }
+                        Boolean favorite, Boolean avoided, Boolean eaten, Boolean includeArchived) { }

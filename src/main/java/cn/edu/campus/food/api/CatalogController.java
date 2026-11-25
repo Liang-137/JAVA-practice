@@ -4,6 +4,8 @@ import cn.edu.campus.food.api.Requests.*;
 import cn.edu.campus.food.domain.Models.*;
 import cn.edu.campus.food.service.CatalogService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
@@ -34,7 +36,11 @@ public class CatalogController {
     @PostMapping("/stalls/{id}/restore") @ResponseStatus(HttpStatus.NO_CONTENT)
     public void restoreStall(@PathVariable long id) { service.restoreStall(id); }
 
-    @GetMapping("/dishes") public Page<Dish> dishes(@Valid @ModelAttribute DishQuery query) { return service.dishes(query); }
+    @GetMapping("/dishes") public Page<Dish> dishes(@Valid @ModelAttribute DishQuery query,
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return service.dishes(query, page, size);
+    }
     @GetMapping("/dishes/{id}") public Dish dish(@PathVariable long id) { return service.dish(id); }
     @PostMapping("/dishes") @ResponseStatus(HttpStatus.CREATED)
     public Dish createDish(@Valid @RequestBody DishInput input) { return service.createDish(input); }

@@ -9,12 +9,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 @Transactional
 public class MealService {
+    private static final DateTimeFormatter MONTH_FORMAT = new DateTimeFormatterBuilder()
+            .appendValue(ChronoField.YEAR, 4).appendLiteral('-').appendValue(ChronoField.MONTH_OF_YEAR, 2)
+            .toFormatter(Locale.ROOT);
+
     private final FoodRepository db;
     private final CurrentUser user;
     public MealService(FoodRepository db, CurrentUser user) { this.db = db; this.user = user; }
@@ -73,7 +80,7 @@ public class MealService {
         return new Page<>(selected.items().stream().map(h -> get(h.id())).toList(), selected.page(), selected.size(), selected.total());
     }
     public static YearMonth parseMonth(String value) {
-        try { return YearMonth.parse(value); }
+        try { return YearMonth.parse(value, MONTH_FORMAT); }
         catch (DateTimeException ex) { throw BusinessException.invalid("月份格式应为 yyyy-MM，例如 2026-11"); }
     }
 }
