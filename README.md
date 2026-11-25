@@ -39,7 +39,7 @@ Invoke-RestMethod 'http://127.0.0.1:8080/api/health'
 
 每个 PR 和每次推送到 `main` 都会产生 `Build and test` 检查。它在 Windows 上使用 JDK 17，运行 `./build.ps1 package` 执行集成测试并打包，再启动 JAR，运行包含 PNG 上传的 `scripts/demo.ps1`。同一 PR 更新时，GitHub 会取消旧运行。
 
-只改 `README.md` 或 `docs/` 下的 Markdown 时，检查会跳过构建。需要强制跑完整流程时，可在 GitHub 的 **Actions → CI → Run workflow** 中手动触发。
+只改 `README.md` 或 `docs/` 下的 Markdown 时，检查会跳过构建。推送到 `main` 时，若浅克隆中缺少上次推送的提交，CI 会执行完整构建。需要强制跑完整流程时，可在 GitHub 的 **Actions → CI → Run workflow** 中手动触发。
 
 ## 已实现
 

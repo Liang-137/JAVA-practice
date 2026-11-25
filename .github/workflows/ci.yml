@@ -67,7 +67,7 @@ jobs:
         if: steps.changes.outputs.build == 'true'
         run: |
           $jar = Get-Item target/*.jar
-          $server = Start-Process java -ArgumentList '-jar', $jar.FullName -PassThru -NoNewWindow
+          $server = Start-Process java -ArgumentList '-jar', ('"{0}"' -f $jar.FullName) -PassThru -NoNewWindow
           try {
             curl.exe --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 --max-time 3 http://127.0.0.1:8080/api/health
             if ($LASTEXITCODE -ne 0) { throw 'The packaged service did not become ready.' }
