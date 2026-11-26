@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#fff4e3">
+    <title>校园食记 · 前端原型</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+</head>
+<body>
+    <!-- Design prototype: should browsing, filters, or meal history lead the campus dining home? -->
+    <header class="masthead">
+        <div class="container header-inner">
+            <a class="brand" href="#" aria-label="校园食记首页">
+                <span class="brand-icon" data-icon="bowl"></span><span>校园食记</span>
+            </a>
+            <button class="button" type="button" data-action="record"><span data-icon="plus"></span> 记一餐</button>
+        </div>
+    </header>
+    <main id="main" class="container" tabindex="-1" aria-busy="true">
+        <p class="loading" role="status">正在读取菜单和食记…</p>
+    </main>
+    <footer class="container footer">
+        <span id="source" role="status"></span>
+        <div class="switcher" id="switcher" role="group" aria-label="切换原型布局" hidden>
+            <button type="button" data-variant="-1" aria-label="上一种原型"><span data-icon="left"></span></button>
+            <span id="variant-label" aria-live="polite"></span>
+            <button type="button" data-variant="1" aria-label="下一种原型"><span data-icon="right"></span></button>
+        </div>
+    </footer>
+    <nav aria-label="主导航" id="navigation" class="bottom-nav">
+        <div class="nav-items">
+            <a href="#" data-view="home"><span data-icon="home"></span>首页</a>
+            <a href="#catalog" data-view="catalog"><span data-icon="recipe"></span>菜谱</a>
+            <a href="#diary" data-view="diary"><span data-icon="market"></span>我的市集</a>
+        </div>
+    </nav>
+    <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+    <div class="notification" id="notification" role="status" aria-live="polite"></div>
+</body>
+</html>
